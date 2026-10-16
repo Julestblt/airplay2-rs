@@ -1529,6 +1529,13 @@ impl Connection {
         self.spatial_speakers.clone()
     }
 
+    /// Set the volume that will be sent when streaming starts, without
+    /// sending anything now. Use this before `start_streaming*` so the
+    /// receiver never plays at the 0 dB default, even briefly.
+    pub fn set_initial_volume(&mut self, volume: f32) {
+        self.volume = volume.clamp(0.0, 1.0);
+    }
+
     /// Set volume.
     pub async fn set_volume(&mut self, volume: f32) -> Result<()> {
         let clamped = volume.clamp(0.0, 1.0);
