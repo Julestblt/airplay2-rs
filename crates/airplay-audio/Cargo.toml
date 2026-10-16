@@ -19,12 +19,11 @@ tracing.workspace = true
 socket2.workspace = true
 rand.workspace = true
 crossbeam-channel = "0.5"
-libc = "0.2"
 spin_sleep = "1.2"
 
 # Audio codecs
 alac-encoder.workspace = true
-fdk-aac.workspace = true
+fdk-aac = { workspace = true, optional = true }
 
 # Audio processing
 biquad = "0.4"
@@ -36,3 +35,13 @@ mockall.workspace = true
 test-case.workspace = true
 proptest.workspace = true
 hound = "3.5"  # WAV file writing for audio validation tests
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+default = ["aac"]
+# AAC encoding via Fraunhofer FDK-AAC (buffered streams). Optional because
+# FDK-AAC's license is not GPL-compatible for binary redistribution and it
+# needs a C++ toolchain; realtime ALAC streaming does not use it.
+aac = ["dep:fdk-aac"]

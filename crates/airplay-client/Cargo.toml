@@ -12,7 +12,7 @@ airplay-discovery = { path = "../airplay-discovery" }
 airplay-crypto = { path = "../airplay-crypto" }
 airplay-pairing = { path = "../airplay-pairing" }
 airplay-rtsp = { path = "../airplay-rtsp" }
-airplay-audio = { path = "../airplay-audio" }
+airplay-audio = { path = "../airplay-audio", default-features = false }
 airplay-timing = { path = "../airplay-timing" }
 tokio.workspace = true
 futures.workspace = true
@@ -29,3 +29,7 @@ tokio-test.workspace = true
 mockall.workspace = true
 test-case.workspace = true
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
+
+[features]
+default = ["aac"]
+aac = ["airplay-audio/aac"]
