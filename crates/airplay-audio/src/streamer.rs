@@ -401,6 +401,9 @@ struct StreamerInner {
     /// Tells the receiver to render audio this far in the future, giving more
     /// time for retransmit recovery of lost packets.
     render_delay_ns: u64,
+    /// Audio to accumulate before a live stream sends its first packet.
+    /// Everything buffered here is added to the end-to-end latency.
+    live_prebuffer_ms: u32,
     /// Whether to use PTP-mode sync packets (PT=87) instead of NTP (PT=84).
     use_ptp_sync: bool,
     /// PTP master clock identity (from BMCA, used in PT=87 packets).
@@ -463,6 +466,7 @@ impl AudioStreamer {
                 spatial_snapshot: None,
                 first_packet_sent: false,
                 render_delay_ns: 0,
+                live_prebuffer_ms: 1000,
                 use_ptp_sync: false,
                 ptp_master_clock_id: [0u8; 8],
             })),
@@ -505,6 +509,13 @@ impl AudioStreamer {
     /// This shifts NTP timestamps in sync packets into the future, telling
     /// the receiver to buffer audio longer before rendering. This gives more
     /// time for retransmit recovery of lost packets.
+    /// Sets how much audio a live stream buffers before sending (default
+    /// 1000 ms, capped at the 2000 ms buffer). Lower means less latency but
+    /// less protection against a bursty source.
+    pub async fn set_live_prebuffer_ms(&mut self, ms: u32) {
+        self.inner.lock().await.live_prebuffer_ms = ms.clamp(20, 2000);
+    }
+
     pub async fn set_render_delay_ms(&mut self, delay_ms: u32) {
         let delay_ns = delay_ms as u64 * 1_000_000;
         self.inner.lock().await.render_delay_ns = delay_ns;
@@ -725,7 +736,8 @@ impl AudioStreamer {
         tracing::info!("Live streaming: waiting for initial buffer fill...");
         let buffer_start = std::time::Instant::now();
         let max_wait = std::time::Duration::from_secs(5);
-        let target_fill_pct = 50.0; // Wait for 50% of 2000ms buffer = 1000ms
+        // Wait for the configured prebuffer (default 1000 ms of the 2000 ms buffer).
+        let target_fill_pct = self.inner.lock().await.live_prebuffer_ms as f32 / 2000.0 * 100.0;
 
         loop {
             // Try to decode some frames into the buffer

@@ -220,6 +220,7 @@ pub struct Connection {
     ptp_master_clock_id: Option<[u8; 8]>,
     /// Render delay in ms added to NTP timestamps for extra retransmit headroom.
     render_delay_ms: u32,
+    live_prebuffer_ms: Option<u32>,
     /// Equalizer configuration (set before streaming).
     eq_config: Option<EqConfig>,
     /// Shared equalizer parameters for real-time control.
@@ -347,6 +348,7 @@ impl Connection {
             control_stop: Arc::new(AtomicBool::new(false)),
             events_stream: None,
             render_delay_ms: 0,
+            live_prebuffer_ms: None,
             eq_config: None,
             eq_params: None,
             spatial_params: None,
@@ -515,6 +517,7 @@ impl Connection {
             control_stop: Arc::new(AtomicBool::new(false)),
             events_stream: None,
             render_delay_ms: 0,
+            live_prebuffer_ms: None,
             eq_config: None,
             eq_params: None,
             spatial_params: None,
@@ -719,6 +722,7 @@ impl Connection {
             control_stop: Arc::new(AtomicBool::new(false)),
             events_stream: None,
             render_delay_ms: 0,
+            live_prebuffer_ms: None,
             eq_config: None,
             eq_params: None,
             spatial_params: None,
@@ -1289,6 +1293,9 @@ impl Connection {
         if self.render_delay_ms > 0 {
             streamer.set_render_delay_ms(self.render_delay_ms).await;
         }
+        if let Some(ms) = self.live_prebuffer_ms {
+            streamer.set_live_prebuffer_ms(ms).await;
+        }
         // Use live watch channel for current offset (not stale setup-time value).
         // The BMCA slave loop continuously updates the offset, so the watch channel
         // has the latest value — much better than the snapshot from setup() time.
@@ -1492,6 +1499,12 @@ impl Connection {
     /// headroom for retransmit recovery of lost packets over lossy WiFi.
     ///
     /// Must be called before `start_streaming()`. Typical values: 100-500ms.
+    /// Audio a live stream accumulates before sending its first packet
+    /// (streamer default: 1000 ms). Call before `start_streaming_live`.
+    pub fn set_live_prebuffer_ms(&mut self, ms: u32) {
+        self.live_prebuffer_ms = Some(ms);
+    }
+
     pub fn set_render_delay_ms(&mut self, delay_ms: u32) {
         self.render_delay_ms = delay_ms;
     }
