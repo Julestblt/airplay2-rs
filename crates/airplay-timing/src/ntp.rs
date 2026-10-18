@@ -361,6 +361,9 @@ pub async fn timing_sync_loop(
 pub struct NtpTimingServer {
     socket: Arc<TokioUdpSocket>,
     port: u16,
+    /// Timing requests received from receivers. Zero after a few seconds of
+    /// SETUP usually means inbound UDP is blocked (e.g. a host firewall).
+    requests: Arc<std::sync::atomic::AtomicU64>,
     shutdown_tx: watch::Sender<bool>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
 }
@@ -375,14 +378,17 @@ impl NtpTimingServer {
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         let clock = Clock::new(sample_rate);
 
+        let requests = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let task_requests = requests.clone();
         let task_socket = socket.clone();
         let task_handle = tokio::spawn(async move {
-            Self::run_loop(task_socket, clock, shutdown_rx).await;
+            Self::run_loop(task_socket, clock, shutdown_rx, task_requests).await;
         });
 
         Ok(Self {
             socket,
             port,
+            requests,
             shutdown_tx,
             task_handle: Some(task_handle),
         })
@@ -391,6 +397,11 @@ impl NtpTimingServer {
     /// Get the local port number.
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Number of timing requests received so far.
+    pub fn requests_received(&self) -> u64 {
+        self.requests.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Stop the timing server.
@@ -405,12 +416,19 @@ impl NtpTimingServer {
         socket: Arc<TokioUdpSocket>,
         clock: Clock,
         mut shutdown_rx: watch::Receiver<bool>,
+        requests: Arc<std::sync::atomic::AtomicU64>,
     ) {
+        // Test hook: simulate a firewall that drops inbound timing requests.
+        let drop_all = std::env::var_os("AIRPLAY_NTP_DROP_REQUESTS").is_some();
         let mut buf = [0u8; 64];
         loop {
             tokio::select! {
                 result = socket.recv_from(&mut buf) => {
                     if let Ok((len, addr)) = result {
+                        if drop_all {
+                            continue;
+                        }
+                        requests.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         let recv_time = clock.now_ntp();
                         if let Ok(request) = NtpRequest::parse(&buf[..len]) {
                             let send_time = clock.now_ntp();

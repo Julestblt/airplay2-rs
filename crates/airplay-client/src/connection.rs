@@ -1072,6 +1072,12 @@ impl Connection {
             .unwrap_or(0.0)
     }
 
+    /// NTP timing requests received from the receiver, if an NTP timing
+    /// server is running. Useful to diagnose blocked inbound UDP.
+    pub fn ntp_requests_received(&self) -> Option<u64> {
+        self.timing_server.as_ref().map(|t| t.requests_received())
+    }
+
     /// Get current volume.
     pub fn volume(&self) -> f32 {
         self.volume
